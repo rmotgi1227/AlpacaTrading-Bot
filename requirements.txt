@@ -1,0 +1,7 @@
+# Swing Trading Options Bot - Python 3.11+
+alpaca-trade-api>=3.0.0
+yfinance>=0.2.36
+pandas>=2.0.0
+pandas-ta>=0.3.14b0
+python-dotenv>=1.0.0
+apscheduler>=3.10.0
