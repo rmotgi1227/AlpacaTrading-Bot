@@ -2,23 +2,59 @@
 Monitor open positions and trigger exits via risk manager.
 Runs every 15 min during market hours.
 """
+import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from data.market_data import get_account_info
+from config.settings import TIMEZONE
 from risk.manager import should_exit
 from trading.order_manager import close_position
 
+_tz = ZoneInfo(TIMEZONE)
+
 logger = logging.getLogger(__name__)
 
-# Optional: persist position open dates when we place orders (keyed by symbol)
+_POSITIONS_FILE = Path(__file__).resolve().parent.parent / "data" / "positions.json"
 _position_open_dates: Dict[str, datetime] = {}
+
+
+def _load_positions() -> None:
+    """Load persisted position open dates from disk."""
+    global _position_open_dates
+    try:
+        if _POSITIONS_FILE.exists():
+            raw = json.loads(_POSITIONS_FILE.read_text())
+            _position_open_dates = {
+                sym: datetime.fromisoformat(ts) for sym, ts in raw.items()
+            }
+            logger.info("Loaded %d position open dates from %s", len(_position_open_dates), _POSITIONS_FILE)
+    except Exception as e:
+        logger.warning("Failed to load positions file: %s", e)
+        _position_open_dates = {}
+
+
+def _save_positions() -> None:
+    """Persist position open dates to disk."""
+    try:
+        _POSITIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        raw = {sym: dt.isoformat() for sym, dt in _position_open_dates.items()}
+        _POSITIONS_FILE.write_text(json.dumps(raw, indent=2))
+    except Exception as e:
+        logger.warning("Failed to save positions file: %s", e)
+
+
+# Load on import so bot restart recovers state
+_load_positions()
 
 
 def register_position_opened(symbol: str, opened_at: Optional[datetime] = None) -> None:
     """Call when we open a position so we can enforce max hold. Bot should call this after place_option_order."""
     _position_open_dates[symbol] = opened_at or datetime.utcnow()
+    _save_positions()
 
 
 def get_position_open_date(symbol: str) -> Optional[datetime]:
@@ -51,12 +87,20 @@ def track_positions() -> List[dict]:
                     open_date = datetime.fromisoformat(str(p["opened_at"]).replace("Z", "+00:00"))
                 except Exception:
                     pass
+            # Skip stop-loss/take-profit on same day as entry to avoid PDT
+            if open_date is not None:
+                today = datetime.now(_tz).date()
+                opened_date = open_date.date() if hasattr(open_date, 'date') else today
+                if opened_date == today:
+                    logger.debug("Skipping exit check for %s (opened today, PDT guard)", sym)
+                    continue
             do_exit, reason = should_exit(p, current_price=current_price, open_date=open_date)
             if do_exit and reason:
                 logger.info("Exit triggered for %s: %s", sym, reason)
                 if close_position(p):
                     actions.append({"symbol": sym, "action": "close", "reason": reason})
                     _position_open_dates.pop(sym, None)
+                    _save_positions()
                     try:
                         from notifications.daily_summary import record_trade
                         pl = p.get("unrealized_pl") or getattr(p, "unrealized_pl", None)

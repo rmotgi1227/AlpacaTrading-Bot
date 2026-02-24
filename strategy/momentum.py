@@ -142,11 +142,9 @@ def calculate_signals(
     macd_v, macd_r = _macd_signal(primary)
     ema_v, ema_r = _ema_signal(primary)
     reasons.extend(rsi_r + macd_r + ema_r)
-    if vol_ok:
-        scores.extend([rsi_v, macd_v, ema_v])
-    else:
-        reasons.append("Volume below confirmation threshold")
-        scores.extend([0, 0, 0])
+    scores.extend([rsi_v, macd_v, ema_v])
+    if not vol_ok:
+        reasons.append("Volume below confirmation threshold (signal not blocked)")
     score = sum(scores)
     if score >= SIGNAL_THRESHOLD:
         signal = "BUY_CALL"

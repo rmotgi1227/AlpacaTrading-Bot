@@ -88,7 +88,7 @@ def _get_movers_from_snapshots(symbols: List[str], top_n: int) -> List[str]:
         for i in range(0, len(symbols), SNAPSHOT_BATCH):
             batch = symbols[i : i + SNAPSHOT_BATCH]
             try:
-                snapshots = api.get_snapshots(batch)
+                snapshots = api.get_snapshots(batch, feed="iex")
             except Exception as e:
                 logger.warning("get_snapshots batch failed: %s", e)
                 continue
@@ -114,9 +114,12 @@ def _get_movers_from_snapshots(symbols: List[str], top_n: int) -> List[str]:
                     if tup[0] is not None:
                         results.append(tup)
         if not results:
+            logger.warning("No snapshot results from %d symbols — movers will fall back to universe order", len(symbols))
             return []
         results.sort(key=lambda x: x[1], reverse=True)
-        return [r[0] for r in results[:top_n]]
+        top = results[:top_n]
+        logger.info("Top movers by abs%% change: %s", [(r[0], f"{r[2]:+.2f}%") for r in top])
+        return [r[0] for r in top]
     except Exception as e:
         logger.warning("_get_movers_from_snapshots failed: %s", e)
         return []

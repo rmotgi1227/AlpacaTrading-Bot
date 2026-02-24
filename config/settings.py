@@ -57,21 +57,21 @@ EMA_FAST = 9
 EMA_SLOW = 21
 VOLUME_MA_DAYS = 20
 VOLUME_CONFIRM_MULTIPLIER = 1.5  # signal confirmed when volume > this * 20d avg
-SIGNAL_THRESHOLD = 2  # need |score| >= 2 for BUY_CALL / BUY_PUT
+SIGNAL_THRESHOLD = 2  # need |score| >= 2 for BUY_CALL / BUY_PUT (2 of 3 indicators must agree)
 
 # ----- Risk -----
-MAX_POSITION_PCT = 20  # max 20% of portfolio per position
+MAX_POSITION_PCT = 10  # max 10% of portfolio per position
 MAX_OPEN_POSITIONS = 4
-STOP_LOSS_PCT = 25    # exit if position down 25% from entry
-TAKE_PROFIT_PCT = 40  # exit if position up 40% from entry
+STOP_LOSS_PCT = 20    # exit if position down 20% from entry
+TAKE_PROFIT_PCT = 15  # exit if position up 15% from entry
 MAX_HOLD_DAYS = 5     # close if held > 5 trading days
 FRIDAY_CLOSE_HOUR = 15  # 3:00 PM ET - close all positions
 
 # ----- Options -----
 OPTIONS_DTE_MIN = 14
-OPTIONS_DTE_MAX = 30
-OPTIONS_DELTA_MIN = 0.30
-OPTIONS_DELTA_MAX = 0.45
+OPTIONS_DTE_MAX = 60
+OPTIONS_DELTA_MIN = 0.25
+OPTIONS_DELTA_MAX = 0.60
 OPTIONS_MIN_OPEN_INTEREST = 100
 
 # ----- Scanner -----
@@ -83,6 +83,7 @@ POSITION_TRACK_INTERVAL_MIN = 15  # check exits every 15 min
 # ----- Scheduling (Eastern) -----
 TIMEZONE = "America/New_York"
 PREMARKET_SCAN_TIME = "09:00"   # 9:00 AM ET
+PREMARKET_MISFIRE_GRACE_SEC = 3600  # allow up to 60 min late execution after downtime/sleep
 MARKET_OPEN_SCAN_TIME = "09:45" # 9:45 AM ET
 MARKET_CLOSE_HOUR = 16         # 4:00 PM ET
 DAILY_SUMMARY_TIME = "16:15"   # 4:15 PM ET
@@ -92,6 +93,13 @@ NOTIFICATION_EMAIL_FROM = os.getenv("NOTIFICATION_EMAIL_FROM", "")
 NOTIFICATION_EMAIL_APP_PASSWORD = os.getenv("NOTIFICATION_EMAIL_APP_PASSWORD", "")
 NOTIFICATION_EMAIL_TO = os.getenv("NOTIFICATION_EMAIL_TO", "")
 NOTIFICATION_SMS_ENABLED = False  # Twilio stubbed; set True when configured
+
+# ----- LLM signal filter -----
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() in ("true", "1", "yes")
+LLM_MODEL = os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001")
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "256"))
+LLM_TIMEOUT_SEC = int(os.getenv("LLM_TIMEOUT_SEC", "10"))
 
 # ----- Logging -----
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
