@@ -34,6 +34,21 @@ CORE_WATCHLIST = [
     "QQQ",
     "NVDA",
     "AAPL",
+    "AMD",
+    "META",
+    "AMZN",
+    "MSFT",
+    "GOOGL",
+    "NFLX",
+    "CRM",
+    "AVGO",
+    "SHOP",
+    "COIN",
+    "PLTR",
+    "SOFI",
+    "MARA",
+    "ARM",
+    "SMCI",
 ]
 
 # ----- Fallback universe for pre-market scanner (when API returns nothing useful) -----
@@ -57,13 +72,13 @@ EMA_FAST = 9
 EMA_SLOW = 21
 VOLUME_MA_DAYS = 20
 VOLUME_CONFIRM_MULTIPLIER = 1.5  # signal confirmed when volume > this * 20d avg
-SIGNAL_THRESHOLD = 2  # need |score| >= 2 for BUY_CALL / BUY_PUT (2 of 3 indicators must agree)
+SIGNAL_THRESHOLD = 1  # need |score| >= 1 for BUY_CALL / BUY_PUT (LLM filter handles quality)
 
 # ----- Risk -----
 MAX_POSITION_PCT = 10  # max 10% of portfolio per position
 MAX_OPEN_POSITIONS = 4
-STOP_LOSS_PCT = 20    # exit if position down 20% from entry
-TAKE_PROFIT_PCT = 15  # exit if position up 15% from entry
+STOP_LOSS_PCT = 15    # exit if position down 15% from entry
+TAKE_PROFIT_PCT = 20  # exit if position up 20% from entry
 MAX_HOLD_DAYS = 5     # close if held > 5 trading days
 FRIDAY_CLOSE_HOUR = 15  # 3:00 PM ET - close all positions
 
@@ -78,7 +93,7 @@ OPTIONS_MIN_OPEN_INTEREST = 100
 PREMARKET_SCAN_TOP_N = 5   # add top N movers to daily watchlist
 SCAN_START_OFFSET_MIN = 15  # first scan 15 min after open (9:45 AM ET)
 SCAN_INTERVAL_MIN = 30     # scan every 30 min
-POSITION_TRACK_INTERVAL_MIN = 15  # check exits every 15 min
+POSITION_TRACK_INTERVAL_MIN = 5   # check exits every 5 min
 
 # ----- Scheduling (Eastern) -----
 TIMEZONE = "America/New_York"
