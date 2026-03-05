@@ -5,6 +5,7 @@ import logging
 from typing import Any, Optional
 
 from config.settings import (
+    MAX_SPREAD_PCT,
     OPTIONS_DELTA_MAX,
     OPTIONS_DELTA_MIN,
     OPTIONS_DTE_MAX,
@@ -71,6 +72,17 @@ def select_option(
         chain = chain.copy()
         chain["_liq"] = chain.apply(_liquidity_score, axis=1)
         chain["_spread"] = chain.apply(_spread_score, axis=1)
+        # Hard filter: reject contracts with bid-ask spread > MAX_SPREAD_PCT
+        before_count = len(chain)
+        chain = chain[chain["_spread"] <= MAX_SPREAD_PCT]
+        filtered_count = before_count - len(chain)
+        if filtered_count > 0:
+            logger.info("Spread filter: rejected %d/%d contracts for %s (spread > %.0f%%)",
+                        filtered_count, before_count, symbol, MAX_SPREAD_PCT * 100)
+        if chain.empty:
+            logger.info("All %d contracts for %s %s exceeded max spread (%.0f%%)",
+                        before_count, symbol, option_type, MAX_SPREAD_PCT * 100)
+            return None
         chain = chain.sort_values(by=["_liq", "_spread"], ascending=[False, True])
         best = chain.iloc[0]
         contract_symbol = best.get("contractSymbol") or best.get("contract_symbol")

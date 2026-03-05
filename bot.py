@@ -19,6 +19,10 @@ from config.settings import (
     LOG_WHEN,
     LOG_DIR,
     MARKET_OPEN_SCAN_TIME,
+    MAX_POSITION_PCT,
+    MAX_PRICE_DEVIATION_PCT,
+    MAX_SPREAD_PCT,
+    OPTIONS_MIN_VIABLE_PREMIUM,
     PREMARKET_SCAN_TIME,
     PREMARKET_MISFIRE_GRACE_SEC,
     SCAN_INTERVAL_MIN,
@@ -32,6 +36,7 @@ from risk.manager import can_open_position, calculate_position_size
 from scanner.premarket_scanner import build_daily_watchlist
 from strategy.momentum import calculate_signals
 from llm.signal_filter import llm_filter_signal
+from data.alpaca_options_client import get_option_quote
 from trading.order_manager import place_option_order
 from trading.position_tracker import get_portfolio_summary, register_position_opened, track_positions
 from notifications.daily_summary import record_signal, record_scanner_picks, record_trade
@@ -105,7 +110,22 @@ def boot() -> bool:
         if not info:
             logger.error("Could not connect to Alpaca or get account")
             return False
-        logger.info("Connected. Portfolio value=%.2f buying_power=%.2f", info.get("portfolio_value", 0), info.get("buying_power", 0))
+        portfolio_value = info.get("portfolio_value", 0)
+        logger.info("Connected. Portfolio value=%.2f buying_power=%.2f", portfolio_value, info.get("buying_power", 0))
+        # Capital pre-flight: warn if account is too small to trade options
+        min_account = (OPTIONS_MIN_VIABLE_PREMIUM * 100) / (MAX_POSITION_PCT / 100)
+        if portfolio_value < min_account:
+            logger.error(
+                "Account underfunded for options trading: $%.2f < minimum $%.2f "
+                "(need at least $%.2f at %d%% position sizing to buy a $%.2f premium contract)",
+                portfolio_value, min_account, min_account, MAX_POSITION_PCT, OPTIONS_MIN_VIABLE_PREMIUM,
+            )
+        elif portfolio_value < min_account * 3:
+            logger.warning(
+                "Low capital warning: $%.2f is close to minimum $%.2f — "
+                "most scans will find 0 affordable contracts",
+                portfolio_value, min_account,
+            )
         return True
     except Exception as e:
         logger.exception("Boot failed: %s", e)
@@ -167,9 +187,34 @@ def run_signal_scan() -> None:
                 contract = select_option(symbol, sig["signal"], account_value)
                 if not contract:
                     continue
-                cost = contract.get("estimated_cost") or contract.get("ask") or 0
-                if cost <= 0:
+                stale_cost = contract.get("estimated_cost") or contract.get("ask") or 0
+                if stale_cost <= 0:
                     continue
+                # Real-time price re-fetch before order submission
+                cost = stale_cost
+                occ_sym = contract.get("symbol") or contract.get("contractSymbol")
+                if occ_sym:
+                    rt_quote = get_option_quote(occ_sym)
+                    if rt_quote is not None:
+                        # Gate 1: spread check
+                        if rt_quote["spread_pct"] > MAX_SPREAD_PCT:
+                            logger.info("ABORT %s: real-time spread %.1f%% exceeds max %.1f%%",
+                                        occ_sym, rt_quote["spread_pct"] * 100, MAX_SPREAD_PCT * 100)
+                            continue
+                        # Gate 2: price deviation check
+                        rt_ask = rt_quote["ask"]
+                        if rt_ask > 0 and stale_cost > 0:
+                            deviation = abs(rt_ask - stale_cost) / stale_cost
+                            if deviation > MAX_PRICE_DEVIATION_PCT:
+                                logger.info("ABORT %s: price deviation %.1f%% (stale=$%.2f, rt=$%.2f) exceeds max %.1f%%",
+                                            occ_sym, deviation * 100, stale_cost, rt_ask, MAX_PRICE_DEVIATION_PCT * 100)
+                                continue
+                        # Use real-time ask as limit price
+                        cost = rt_ask if rt_ask > 0 else stale_cost
+                        logger.info("RT quote for %s: bid=$%.2f ask=$%.2f spread=%.1f%%",
+                                    occ_sym, rt_quote["bid"], rt_quote["ask"], rt_quote["spread_pct"] * 100)
+                    else:
+                        logger.warning("Could not fetch RT quote for %s; using stale price $%.2f", occ_sym, stale_cost)
                 qty = calculate_position_size(account_value, cost)
                 if qty < 1:
                     continue

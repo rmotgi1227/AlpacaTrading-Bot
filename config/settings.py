@@ -75,7 +75,7 @@ VOLUME_CONFIRM_MULTIPLIER = 1.5  # signal confirmed when volume > this * 20d avg
 SIGNAL_THRESHOLD = 1  # need |score| >= 1 for BUY_CALL / BUY_PUT (LLM filter handles quality)
 
 # ----- Risk -----
-MAX_POSITION_PCT = 10  # max 10% of portfolio per position
+MAX_POSITION_PCT = 20  # max 20% of portfolio per position
 MAX_OPEN_POSITIONS = 4
 STOP_LOSS_PCT = 15    # exit if position down 15% from entry
 TAKE_PROFIT_PCT = 20  # exit if position up 20% from entry
@@ -88,6 +88,18 @@ OPTIONS_DTE_MAX = 60
 OPTIONS_DELTA_MIN = 0.25
 OPTIONS_DELTA_MAX = 0.60
 OPTIONS_MIN_OPEN_INTEREST = 100
+
+# ----- Slippage Protection -----
+OPTIONS_MIN_VIABLE_PREMIUM = 0.50  # floor for estimating min account size
+MAX_SPREAD_PCT = 0.10              # reject options with bid-ask spread > 10% of mid price
+OPTIONS_DATA_FEED = os.getenv("OPTIONS_DATA_FEED", "indicative")  # "indicative" (free) or "sip" (OPRA, paid)
+MAX_PRICE_DEVIATION_PCT = 0.03     # abort if real-time price deviates > 3% from yfinance
+
+# ----- Exit Order Tuning -----
+EXIT_LIMIT_TIMEOUT_SEC = 30        # wait for limit fill before stepping down
+EXIT_PRICE_STEP_DOWN_PCT = 0.02    # reduce price by 2% each step
+EXIT_MAX_STEP_DOWNS = 2            # max price reductions before market fallback
+EXIT_USE_MARKET_FALLBACK = True    # last resort: market order if all limits fail
 
 # ----- Scanner -----
 PREMARKET_SCAN_TOP_N = 5   # add top N movers to daily watchlist

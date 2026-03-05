@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
+from data.alpaca_options_client import get_option_quotes_batch
 from data.market_data import get_account_info
 from config.settings import TIMEZONE
 from risk.manager import should_exit
-from trading.order_manager import close_position
+from trading.order_manager import close_position, close_position_limit
 
 _tz = ZoneInfo(TIMEZONE)
 
@@ -72,13 +73,32 @@ def track_positions() -> List[dict]:
         if not info or not info.get("positions"):
             return actions
         positions = info["positions"]
+        # Fetch real-time bid prices for all positions in one API call
+        all_syms = [
+            p.get("symbol") or getattr(p, "symbol", None)
+            for p in positions
+        ]
+        all_syms = [s for s in all_syms if s]
+        try:
+            rt_quotes = get_option_quotes_batch(all_syms)
+        except Exception as e:
+            logger.warning("Failed to fetch RT quotes batch: %s", e)
+            rt_quotes = {}
         for p in positions:
             sym = p.get("symbol") or getattr(p, "symbol", None)
             if not sym:
                 continue
-            current_price = p.get("current_price") or getattr(p, "current_price", None)
-            if current_price is not None:
-                current_price = float(current_price)
+            # Use real-time bid (actual sellable price) for exit decisions;
+            # fall back to position's mark price if RT quote unavailable
+            rt_quote = rt_quotes.get(sym)
+            if rt_quote and rt_quote.get("bid"):
+                current_price = float(rt_quote["bid"])
+                logger.debug("Using RT bid $%.2f for %s exit eval", current_price, sym)
+            else:
+                current_price = p.get("current_price") or getattr(p, "current_price", None)
+                if current_price is not None:
+                    current_price = float(current_price)
+                logger.debug("No RT bid for %s, using position price $%s", sym, current_price)
             open_date = get_position_open_date(sym)
             if open_date is None and hasattr(p, "opened_at"):
                 open_date = getattr(p, "opened_at", None)
@@ -97,7 +117,7 @@ def track_positions() -> List[dict]:
             do_exit, reason = should_exit(p, current_price=current_price, open_date=open_date)
             if do_exit and reason:
                 logger.info("Exit triggered for %s: %s", sym, reason)
-                if close_position(p):
+                if close_position_limit(p, bid_price=current_price):
                     actions.append({"symbol": sym, "action": "close", "reason": reason})
                     _position_open_dates.pop(sym, None)
                     _save_positions()
